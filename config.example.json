@@ -1,0 +1,8 @@
+{
+  "music_base": "~/Music/Bili2Music",
+  "ytdlp": "yt-dlp",
+  "ffmpeg_dir": "~/.bili2music/bin",
+  "port": 8765,
+  "import_music": true,
+  "ocr": true
+}
