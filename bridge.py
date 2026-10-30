@@ -6,7 +6,7 @@ Bili -> Music 本机桥
 并（可选）通过 AppleScript 导入 macOS「音乐」App 资料库。
 仅监听 127.0.0.1，用 X-Bili-Token 头鉴权。
 """
-import os, sys, json, re, time, uuid, threading, subprocess, urllib.request, traceback, glob, shutil, difflib
+import os, sys, json, re, time, uuid, threading, subprocess, urllib.request, traceback, glob, shutil, difflib, queue
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOME = os.path.expanduser("~")
@@ -34,6 +34,11 @@ def _truth(v, d=True):
         return d
     return str(v).lower() in ("1", "true", "yes", "on")
 DO_IMPORT = _truth(os.environ.get("B2M_MUSIC_IMPORT", _cfg("import_music", True)), True)
+try:
+    CONCURRENCY = max(1, min(4, int(os.environ.get("B2M_CONCURRENCY") or _cfg("concurrency", 1))))
+except Exception:
+    CONCURRENCY = 1
+IMPORT_LOCK = threading.Lock()
 TOKEN_FILE = os.path.join(ROOT, "token.txt")
 DONE_FILE = os.path.join(ROOT, "done.json")
 LOG_FILE = os.path.join(ROOT, "logs", "bridge.log")
@@ -101,6 +106,7 @@ def save_done(d):
 
 DONE = load_done()
 JOBS = {}
+JOB_QUEUE = queue.Queue()
 
 # ---------- network ----------
 def http_get_json(url):
@@ -512,6 +518,8 @@ def run_job(job_id, url, mode):
         log("resolve error", url, repr(e))
         return
     job["info"] = {k: info[k] for k in ("title", "owner", "in_season", "season_title", "season_count", "count")}
+    if not job.get("title"):
+        job["title"] = info.get("title") or ""
     pages = info["pages"]
     if mode == "single":
         if info.get("multi_part"):
@@ -577,7 +585,8 @@ def run_job(job_id, url, mode):
     # import new files
     if DO_IMPORT and new_files:
         job["message"] = "导入「音乐」资料库 %d 首…" % len(new_files)
-        cnt, err = import_to_music(new_files)
+        with IMPORT_LOCK:  # 串行导入，避免多个 osascript 同时控制「音乐」冲突
+            cnt, err = import_to_music(new_files)
         job["imported"] = cnt
         if err:
             job["errors"].append("音乐库导入: " + err)
@@ -634,6 +643,10 @@ class H(BaseHTTPRequestHandler):
                                     "music_base": MUSIC_BASE, "import": DO_IMPORT})
         if not self._auth():
             return self._json(401, {"error": "unauthorized"})
+        if self.path == "/jobs":
+            lst = sorted(JOBS.values(), key=lambda j: j.get("created", 0), reverse=True)
+            out = [{k: j.get(k) for k in ("id", "title", "url", "status", "done", "total", "message", "created")} for j in lst[:60]]
+            return self._json(200, {"jobs": out, "concurrency": CONCURRENCY})
         m = re.match(r"^/job/([0-9a-f]+)$", self.path)
         if m:
             j = JOBS.get(m.group(1))
@@ -664,15 +677,36 @@ class H(BaseHTTPRequestHandler):
                 return self._json(400, {"error": "没识别到 BV 号"})
             jid = uuid.uuid4().hex[:12]
             JOBS[jid] = {"id": jid, "url": url, "mode": mode, "lyrics": bool(body.get("lyrics", True)),
-                         "status": "starting", "done": 0, "total": 0, "message": "准备中…",
-                         "errors": [], "imported": 0}
-            threading.Thread(target=run_job, args=(jid, url, mode), daemon=True).start()
+                         "status": "queued", "done": 0, "total": 0, "message": "排队中…",
+                         "errors": [], "imported": 0, "title": "", "created": time.time()}
+            JOB_QUEUE.put(jid)
             return self._json(200, {"job_id": jid})
         return self._json(404, {"error": "not found"})
 
 
+def worker_loop():
+    while True:
+        jid = JOB_QUEUE.get()
+        try:
+            job = JOBS.get(jid)
+            if job and job.get("status") == "queued":
+                job["status"] = "running"
+                job["message"] = "准备中…"
+                run_job(jid, job["url"], job["mode"])
+        except Exception as e:
+            log("worker error", jid, repr(e))
+        finally:
+            JOB_QUEUE.task_done()
+
+
+def start_workers(n):
+    for _ in range(max(1, n)):
+        threading.Thread(target=worker_loop, daemon=True).start()
+
+
 def main():
-    log("bridge starting on 127.0.0.1:%d  music_base=%s import=%s" % (PORT, MUSIC_BASE, DO_IMPORT))
+    log("bridge starting on 127.0.0.1:%d  music_base=%s import=%s concurrency=%d" % (PORT, MUSIC_BASE, DO_IMPORT, CONCURRENCY))
+    start_workers(CONCURRENCY)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     srv.daemon_threads = True
     srv.serve_forever()
