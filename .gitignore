@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# 运行时/私密文件（不入库）
+config.json
+token.txt
+done.json
+logs/
+tmp/
+bin/
+extension/config.js
