@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Bili 到音乐 (Bili2Music)",
+  "version": "1.0.0",
+  "description": "在 B 站视频页点一下，把音频下载成 MP3 并导入 macOS「音乐」。",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Bili 到音乐",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["activeTab"],
+  "host_permissions": ["http://127.0.0.1:8765/*"]
+}
