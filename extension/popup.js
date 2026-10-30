@@ -1,5 +1,6 @@
 const $ = (s) => document.querySelector(s);
-const VERSION = "1.2";
+const VERSION = "1.3";
+const JOB_KEY = "bili2music_job";
 let currentUrl = "";
 let pollTimer = null;
 let seasonInfo = { in_season: false, count: 0, season_title: "" };
@@ -42,6 +43,41 @@ function updateModeInfo() {
   }
 }
 
+function renderJob(j) {
+  const total = j.total || 0;
+  const done = j.done || 0;
+  const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  const pctEl = $("#pct");
+  if (pctEl) pctEl.textContent = total ? (pct + "%　" + done + "/" + total) : "准备中…";
+  $("#bar").style.width = (total ? pct : 8) + "%";
+  $("#msg").textContent = j.message || j.status;
+  $("#errs").textContent = (j.errors && j.errors.length) ? j.errors.slice(-6).join("\n") : "";
+}
+
+async function getSavedJob() {
+  try { return (await chrome.storage.local.get(JOB_KEY))[JOB_KEY] || null; } catch (e) { return null; }
+}
+async function saveJob(id) { try { await chrome.storage.local.set({ [JOB_KEY]: id }); } catch (e) {} }
+async function clearJob() { try { await chrome.storage.local.remove(JOB_KEY); } catch (e) {} }
+
+async function tryResume() {
+  const jobId = await getSavedJob();
+  if (!jobId) return false;
+  try {
+    const j = await api("/job/" + jobId);
+    if (j.status === "running" || j.status === "starting") {
+      hide($("#detect")); hide($("#opts")); hide($("#modeinfo")); hide($("#notpage"));
+      show($("#prog"));
+      renderJob(j);
+      $("#go").disabled = true;
+      poll(jobId);
+      return true;
+    }
+  } catch (e) {}
+  await clearJob();
+  return false;
+}
+
 async function init() {
   console.log("Bili2Music popup", VERSION);
   try {
@@ -52,6 +88,9 @@ async function init() {
     $("#go").disabled = true;
     return;
   }
+  // 若上次有正在进行的任务，优先恢复进度显示
+  if (await tryResume()) return;
+
   chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
     currentUrl = (tabs[0] || {}).url || "";
     if (!/BV[0-9A-Za-z]{10}/.test(currentUrl)) { show($("#notpage")); return; }
@@ -90,12 +129,14 @@ $("#go").addEventListener("click", async () => {
   $("#go").disabled = true;
   hide($("#detect")); hide($("#opts")); hide($("#modeinfo"));
   show($("#prog"));
+  $("#pct").textContent = "准备中…";
   $("#msg").textContent = "提交中…";
   $("#errs").textContent = "";
   $("#bar").style.width = "0%";
   try {
     const r = await api("/download", { url: currentUrl, mode, lyrics: wantLyrics });
     if (r.error) throw new Error(r.error);
+    await saveJob(r.job_id);
     poll(r.job_id);
   } catch (e) {
     $("#msg").textContent = "提交失败：" + e.message;
@@ -108,16 +149,11 @@ function poll(jobId) {
   pollTimer = setInterval(async () => {
     try {
       const j = await api("/job/" + jobId);
-      const total = j.total || 0;
-      const done = j.done || 0;
-      $("#bar").style.width = total ? Math.round((done / total) * 100) + "%" : "8%";
-      $("#msg").textContent = j.message || j.status;
-      if (j.errors && j.errors.length) {
-        $("#errs").textContent = j.errors.slice(-6).join("\n");
-      }
+      renderJob(j);
       if (j.status === "done" || j.status === "error") {
         clearInterval(pollTimer); pollTimer = null;
         $("#bar").style.width = "100%";
+        await clearJob();
         $("#go").disabled = false;
       }
     } catch (e) {
