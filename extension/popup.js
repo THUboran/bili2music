@@ -1,5 +1,5 @@
 const $ = (s) => document.querySelector(s);
-const VERSION = "1.1";
+const VERSION = "1.2";
 let currentUrl = "";
 let pollTimer = null;
 let seasonInfo = { in_season: false, count: 0, season_title: "" };
