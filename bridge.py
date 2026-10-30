@@ -422,7 +422,7 @@ def fetch_video_and_ocr(url, workdir):
     return srt
 
 
-def download_one(page, folder, idx, total, artist, album, workdir, original="", have_lyrics=True, album_artist=None):
+def download_one(page, folder, idx, total, artist, album, workdir, original="", have_lyrics=True, album_artist=None, cover_url=None):
     os.makedirs(workdir, exist_ok=True)
     tmpl = os.path.join(workdir, "%(title)s.%(ext)s")
     cmd = [YTDLP, "-f", "bestaudio", "--extract-audio", "--audio-format", "mp3",
@@ -439,7 +439,7 @@ def download_one(page, folder, idx, total, artist, album, workdir, original="", 
     # tag
     if HAVE_TAG:
         try:
-            tag_mp3(src, page.get("title") or "untitled", artist, album, idx, total, page.get("pic"), original, album_artist)
+            tag_mp3(src, page.get("title") or "untitled", artist, album, idx, total, (cover_url or page.get("pic")), original, album_artist)
         except Exception as e:
             log("tag fail", page.get("url"), repr(e))
     final = os.path.join(folder, "%03d_%s.mp3" % (idx, safe_name(page.get("title") or "untitled")))
@@ -468,15 +468,34 @@ def _replace(dst, src):
     os.replace(src, dst)
 
 
+def _fetch_bytes(url):
+    """下载图片等二进制：curl 优先（直连稳定），失败退回 urllib。"""
+    for _ in range(3):
+        try:
+            r = subprocess.run(["curl", "-sS", "--noproxy", "*", "--max-time", "25",
+                                "-A", UA, "-e", "https://www.bilibili.com/", "-o", "-", url],
+                               capture_output=True)
+            if r.returncode == 0 and len(r.stdout) > 1000:
+                return r.stdout
+        except Exception:
+            pass
+        time.sleep(0.6)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": "https://www.bilibili.com/"})
+        with urllib.request.urlopen(req, timeout=25) as rr:
+            d = rr.read()
+            return d if len(d) > 1000 else None
+    except Exception:
+        return None
+
+
 def tag_mp3(path, title, artist, album, idx, total, pic_url, original="", album_artist=None):
     tmp_cover = os.path.join(TMP, "cover_%s.jpg" % uuid.uuid4().hex)
     cover_bytes = None
     if pic_url:
-        try:
-            req = urllib.request.Request(pic_url, headers={"User-Agent": UA, "Referer": "https://www.bilibili.com/"})
-            with urllib.request.urlopen(req, timeout=25) as r:
-                raw = r.read()
-            if len(raw) > 1000:
+        raw = _fetch_bytes(pic_url)
+        if raw and len(raw) > 1000:
+            try:
                 im = Image.open(__import__("io").BytesIO(raw)).convert("RGB")
                 w, h = im.size
                 s = min(w, h)
@@ -484,8 +503,8 @@ def tag_mp3(path, title, artist, album, idx, total, pic_url, original="", album_
                 im = im.crop((l, t, l + s, t + s)).resize((640, 640), Image.LANCZOS)
                 im.save(tmp_cover, "JPEG", quality=85)
                 cover_bytes = open(tmp_cover, "rb").read()
-        except Exception as e:
-            log("cover fail", path, repr(e))
+            except Exception as e:
+                log("cover proc fail", path, repr(e))
     try:
         try:
             tags = ID3(path)
@@ -559,6 +578,7 @@ def run_job(job_id, url, mode):
     else:
         album = "单曲"
     owner = info["owner"]
+    album_cover = pages[0].get("pic") if (mode != "single" and pages) else None
     folder = os.path.join(MUSIC_BASE, "UP 主 " + safe_name(owner, 60))
     os.makedirs(folder, exist_ok=True)
     job["folder"] = folder
@@ -599,7 +619,7 @@ def run_job(job_id, url, mode):
             artist = clean if (not is_cover and clean) else owner
             orig_tag = clean or "待核实"
             f = download_one(p, folder, i, len(pages), artist, album, workdir, orig_tag,
-                             job.get("lyrics", True), owner)
+                             job.get("lyrics", True), owner, album_cover)
             DONE[key] = {"path": f, "imported": False, "title": p.get("title"), "owner": owner}
             save_done(DONE)
             new_files.append(f)
