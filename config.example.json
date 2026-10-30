@@ -4,5 +4,6 @@
   "ffmpeg_dir": "~/.bili2music/bin",
   "port": 8765,
   "import_music": true,
-  "ocr": true
+  "ocr": true,
+  "concurrency": 1
 }
