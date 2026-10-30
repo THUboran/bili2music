@@ -23,6 +23,13 @@
   .pct { font:600 18px/1.2 -apple-system,"PingFang SC",sans-serif; color:#2b6cb0; margin:4px 0 2px; }  .bar > i { display:block; height:100%; width:0; background:var(--brand); transition:width .3s; }
   .msg { font-size:12px; color:#2d3748; word-break:break-all; min-height:16px; }
   .errs { color:var(--err); font-size:11px; max-height:70px; overflow:auto; margin-top:4px; white-space:pre-wrap; }
+  .job { margin:7px 0; font-size:12px; }
+  .job .jt { font-weight:600; word-break:break-all; }
+  .job .js { color:var(--muted); font-size:11px; margin-top:1px; word-break:break-all; }
+  .job .jbar { height:6px; background:#edf2f7; border-radius:4px; overflow:hidden; margin-top:3px; }
+  .job .jbar > i { display:block; height:100%; width:0; background:var(--brand); transition:width .3s; }
+  .job.done .jbar > i { background:#2f855a; }
+  .job.err .jbar > i { background:var(--err); }
   .hint { color:var(--muted); font-size:11px; margin-top:10px; border-top:1px dashed #e2e8f0; padding-top:8px; }
   .hidden { display:none; }
 </style>
@@ -49,13 +56,11 @@
 
   <div id="modeinfo" class="meta hidden" style="margin:0 0 10px;"></div>
 
-  <button id="go" disabled>下载 MP3</button>
+  <button id="go" disabled>加入下载队列</button>
 
-  <div id="prog" class="hidden">
-    <div class="pct" id="pct"></div>
-    <div class="bar"><i id="bar"></i></div>
-    <div class="msg" id="msg"></div>
-    <div class="errs" id="errs"></div>
+  <div id="tasksec" class="hidden" style="margin-top:10px;border-top:1px dashed #e2e8f0;padding-top:8px;">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">任务 <span id="concurrency"></span></div>
+    <div id="joblist"></div>
   </div>
 
   <div class="hint">下载后自动写入标签/封面并导入「音乐」App；视频若有字幕轨会自动带上歌词。<br>没有 Apple Music 订阅时，iPhone 需在 Finder 里勾「同步音乐」到手机。</div>
