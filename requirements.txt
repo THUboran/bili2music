@@ -1,0 +1,5 @@
+# 仅 macOS。pyobjc 的 Vision/Quartz 用于烧录字幕 OCR。
+mutagen>=1.47
+Pillow>=9.0
+pyobjc-framework-Vision>=9.0
+pyobjc-framework-Quartz>=9.0
