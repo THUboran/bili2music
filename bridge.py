@@ -109,14 +109,36 @@ JOBS = {}
 JOB_QUEUE = queue.Queue()
 
 # ---------- network ----------
+def _curl_get_json(url):
+    cmd = ["curl", "-sS", "--noproxy", "*", "--max-time", "25", "--compressed",
+           "-A", UA, "-e", "https://www.bilibili.com/",
+           "-H", "Accept: application/json,text/plain,*/*", url]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
+        raise RuntimeError((r.stderr or "curl empty").strip()[:200])
+    return json.loads(r.stdout)
+
+
 def http_get_json(url):
-    req = urllib.request.Request(url, headers={
-        "User-Agent": UA,
-        "Referer": "https://www.bilibili.com/",
-        "Accept": "application/json,text/plain,*/*",
-    })
-    with urllib.request.urlopen(req, timeout=25) as r:
-        return json.loads(r.read().decode("utf-8"))
+    """取 B 站接口 JSON：curl 优先（直连、稳定），失败再 urllib，带重试。"""
+    last = None
+    for i in range(4):
+        try:
+            return _curl_get_json(url)
+        except Exception as e:
+            last = e
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": UA,
+                "Referer": "https://www.bilibili.com/",
+                "Accept": "application/json,text/plain,*/*",
+            })
+            with urllib.request.urlopen(req, timeout=25) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            last = e
+        time.sleep(1.2 * (i + 1))
+    raise last
 
 
 def extract_bvid(s):
