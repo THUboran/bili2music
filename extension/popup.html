@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --brand:#2b6cb0; --ok:#2f855a; --err:#c53030; --muted:#718096; }
+  * { box-sizing:border-box; }
+  body { width:340px; margin:0; padding:14px 14px 12px; font:13px/1.45 -apple-system,"PingFang SC",sans-serif; color:#1a202c; }
+  h1 { font-size:15px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:11px; margin-bottom:10px; }
+  .conn { display:inline-block; font-size:11px; padding:1px 6px; border-radius:8px; background:#edf2f7; color:var(--muted); }
+  .conn.ok { background:#e6ffed; color:var(--ok); }
+  .conn.bad { background:#fff5f5; color:var(--err); }
+  .card { border:1px solid #e2e8f0; border-radius:8px; padding:9px 10px; margin:9px 0; }
+  .title { font-weight:600; margin-bottom:3px; word-break:break-all; }
+  .meta { color:var(--muted); font-size:12px; }
+  .tag { display:inline-block; background:#ebf4ff; color:var(--brand); font-size:11px; padding:0 6px; border-radius:8px; margin-left:4px; }
+  .row { display:flex; gap:14px; margin:8px 0 10px; font-size:12px; }
+  .row label { cursor:pointer; }
+  button { width:100%; border:0; border-radius:8px; background:var(--brand); color:#fff; font-size:14px; padding:9px; cursor:pointer; }
+  button:disabled { background:#a0aec0; cursor:not-allowed; }
+  .bar { height:8px; background:#edf2f7; border-radius:5px; overflow:hidden; margin:8px 0 5px; }
+  .bar > i { display:block; height:100%; width:0; background:var(--brand); transition:width .3s; }
+  .msg { font-size:12px; color:#2d3748; word-break:break-all; min-height:16px; }
+  .errs { color:var(--err); font-size:11px; max-height:70px; overflow:auto; margin-top:4px; white-space:pre-wrap; }
+  .hint { color:var(--muted); font-size:11px; margin-top:10px; border-top:1px dashed #e2e8f0; padding-top:8px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <h1>Bili 到音乐</h1>
+  <div class="sub">B 站音频 → MP3 → macOS「音乐」 <span id="conn" class="conn">检测中…</span></div>
+
+  <div id="detect" class="card hidden">
+    <div class="title" id="vtitle">—</div>
+    <div class="meta"><span id="vowner"></span><span id="vseason" class="tag hidden"></span></div>
+  </div>
+
+  <div id="notpage" class="card hidden" style="color:var(--muted)">请在 B 站视频播放页使用。</div>
+
+  <div id="opts" class="row hidden">
+    <label><input type="radio" name="mode" value="collection" checked> 整个合集</label>
+    <label><input type="radio" name="mode" value="single"> 仅当前视频</label>
+  </div>
+
+  <div class="row" id="lyricsrow">
+    <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="wantLyrics" checked> 需要歌词（有烧录字幕用 OCR，否则用字幕轨）</label>
+  </div>
+
+  <button id="go" disabled>下载 MP3</button>
+
+  <div id="prog" class="hidden">
+    <div class="bar"><i id="bar"></i></div>
+    <div class="msg" id="msg"></div>
+    <div class="errs" id="errs"></div>
+  </div>
+
+  <div class="hint">下载后自动写入标签/封面并导入「音乐」App；视频若有字幕轨会自动带上歌词。<br>没有 Apple Music 订阅时，iPhone 需在 Finder 里勾「同步音乐」到手机。</div>
+
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
