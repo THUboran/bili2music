@@ -30,9 +30,13 @@ function updateModeInfo() {
   if (!el) return;
   const mode = (document.querySelector('input[name="mode"]:checked') || {}).value || "single";
   if (mode === "collection") {
-    el.textContent = seasonInfo.in_season
-      ? "将下载：整个合集《" + seasonInfo.season_title + "》 共 " + seasonInfo.count + " 首"
-      : "当前视频不在合集中，将只下载当前单条";
+    if (seasonInfo.in_season) {
+      el.textContent = "将下载：整个合集《" + seasonInfo.season_title + "》 共 " + seasonInfo.count + " 首";
+    } else if (seasonInfo.count > 1) {
+      el.textContent = "将下载：全部 " + seasonInfo.count + " 段（多P视频）";
+    } else {
+      el.textContent = "当前视频只有 1 段，将只下载单条";
+    }
   } else {
     el.textContent = "将下载：仅当前视频";
   }
@@ -58,8 +62,8 @@ async function init() {
       $("#vtitle").textContent = info.title || "(无标题)";
       $("#vowner").textContent = "UP：" + (info.owner || "?") + "　共 " + info.count + " 个视频";
       const t = $("#vseason");
-      if (info.in_season && info.count > 1) {
-        t.textContent = "合集《" + info.season_title + "》";
+      if (info.count > 1) {
+        t.textContent = info.in_season ? ("合集《" + info.season_title + "》") : ("多P视频（共 " + info.count + " 段）");
         show(t);
         document.querySelector('input[value="collection"]').checked = true;
       } else {
@@ -81,7 +85,7 @@ document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListene
 
 $("#go").addEventListener("click", async () => {
   let mode = (document.querySelector('input[name="mode"]:checked') || {}).value || "single";
-  if (mode === "collection" && !seasonInfo.in_season) mode = "single";
+  if (mode === "collection" && seasonInfo.count <= 1) mode = "single";
   const wantLyrics = document.getElementById("wantLyrics").checked;
   $("#go").disabled = true;
   hide($("#detect")); hide($("#opts")); hide($("#modeinfo"));
