@@ -1,5 +1,5 @@
 const $ = (s) => document.querySelector(s);
-const VERSION = "1.4";
+const VERSION = "1.5";
 let currentUrl = "";
 let jobsTimer = null;
 let seasonInfo = { in_season: false, count: 0, season_title: "" };
@@ -118,12 +118,11 @@ document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListene
 $("#go").addEventListener("click", async () => {
   let mode = (document.querySelector('input[name="mode"]:checked') || {}).value || "single";
   if (mode === "collection" && seasonInfo.count <= 1) mode = "single";
-  const wantLyrics = document.getElementById("wantLyrics").checked;
   $("#go").disabled = true;
   const old = $("#go").textContent;
   $("#go").textContent = "提交中…";
   try {
-    const r = await api("/download", { url: currentUrl, mode, lyrics: wantLyrics });
+    const r = await api("/download", { url: currentUrl, mode });
     if (r.error) throw new Error(r.error);
     await loadJobs();
     $("#go").textContent = old;
