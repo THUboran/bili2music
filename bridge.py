@@ -444,19 +444,7 @@ def download_one(page, folder, idx, total, artist, album, workdir, original="", 
             log("tag fail", page.get("url"), repr(e))
     final = os.path.join(folder, "%03d_%s.mp3" % (idx, safe_name(page.get("title") or "untitled")))
     os.replace(src, final) if os.path.exists(final) is False else _replace(final, src)
-    # 歌词（需要时）：优先 OCR 画面烧录字幕（音乐视频CC轨准确率低）；OCR 拿不到才用 CC 字幕轨
-    if have_lyrics and HAVE_TAG:
-        try:
-            srt = None
-            if OCR_ENABLED and HAVE_OCR:
-                srt = fetch_video_and_ocr(page["url"], workdir)  # 烧录字幕 OCR 优先
-            if not srt:
-                log("无烧录字幕(OCR空), 改用CC字幕轨 ->", page.get("url"))
-                srt = fetch_subtitle_srt(page["url"], workdir)
-            if srt and embed_lyrics(final, srt):
-                log("lyrics embedded", page.get("url"), os.path.basename(srt))
-        except Exception as e:
-            log("lyrics fail", page.get("url"), repr(e))
+    # 歌词功能已停用（用户要求不再获取歌词，以提高速度）
     return final
 
 
