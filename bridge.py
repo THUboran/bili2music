@@ -422,7 +422,7 @@ def fetch_video_and_ocr(url, workdir):
     return srt
 
 
-def download_one(page, folder, idx, total, artist, album, workdir, original="", have_lyrics=True):
+def download_one(page, folder, idx, total, artist, album, workdir, original="", have_lyrics=True, album_artist=None):
     os.makedirs(workdir, exist_ok=True)
     tmpl = os.path.join(workdir, "%(title)s.%(ext)s")
     cmd = [YTDLP, "-f", "bestaudio", "--extract-audio", "--audio-format", "mp3",
@@ -439,7 +439,7 @@ def download_one(page, folder, idx, total, artist, album, workdir, original="", 
     # tag
     if HAVE_TAG:
         try:
-            tag_mp3(src, page.get("title") or "untitled", artist, album, idx, total, page.get("pic"), original)
+            tag_mp3(src, page.get("title") or "untitled", artist, album, idx, total, page.get("pic"), original, album_artist)
         except Exception as e:
             log("tag fail", page.get("url"), repr(e))
     final = os.path.join(folder, "%03d_%s.mp3" % (idx, safe_name(page.get("title") or "untitled")))
@@ -468,7 +468,7 @@ def _replace(dst, src):
     os.replace(src, dst)
 
 
-def tag_mp3(path, title, artist, album, idx, total, pic_url, original=""):
+def tag_mp3(path, title, artist, album, idx, total, pic_url, original="", album_artist=None):
     tmp_cover = os.path.join(TMP, "cover_%s.jpg" % uuid.uuid4().hex)
     cover_bytes = None
     if pic_url:
@@ -495,7 +495,7 @@ def tag_mp3(path, title, artist, album, idx, total, pic_url, original=""):
             tags.delall(k)
         tags.add(TIT2(encoding=3, text=title))
         tags.add(TPE1(encoding=3, text=artist))
-        tags.add(TPE2(encoding=3, text=artist))
+        tags.add(TPE2(encoding=3, text=(album_artist or artist)))
         tags.add(TALB(encoding=3, text=album or "单曲"))
         tags.add(TRCK(encoding=3, text="%d/%d" % (idx, total)))
         if original:
@@ -593,8 +593,13 @@ def run_job(job_id, url, mode):
             tagsl = [x.lower() for x in tags]
             is_cover = ("翻唱" in title) or ("cover" in tl) or ("翻唱" in tags) or ("cover" in tagsl)
             # 翻唱 → 艺人=翻唱者(UP主)；疑似原唱原声且能识别 → 艺人=原唱，不用 UP 主
-            artist = owner if (is_cover or orig == "待核实") else orig
-            f = download_one(p, folder, i, len(pages), artist, album, workdir, orig, job.get("lyrics", True))
+            _bad = ["音乐", "现场", "LIVE", "live", "cover", "COVER", "翻唱", "演唱会", "合唱", "大赛", "电台", "神级"]
+            clean = orig if (orig and orig != "待核实" and 2 <= len(orig) <= 8 and "、" not in orig
+                             and not any(w in orig for w in _bad)) else None
+            artist = clean if (not is_cover and clean) else owner
+            orig_tag = clean or "待核实"
+            f = download_one(p, folder, i, len(pages), artist, album, workdir, orig_tag,
+                             job.get("lyrics", True), owner)
             DONE[key] = {"path": f, "imported": False, "title": p.get("title"), "owner": owner}
             save_done(DONE)
             new_files.append(f)
