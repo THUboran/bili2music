@@ -1,8 +1,7 @@
 const $ = (s) => document.querySelector(s);
-const VERSION = "1.3";
-const JOB_KEY = "bili2music_job";
+const VERSION = "1.4";
 let currentUrl = "";
-let pollTimer = null;
+let jobsTimer = null;
 let seasonInfo = { in_season: false, count: 0, season_title: "" };
 
 function api(path, body) {
@@ -22,60 +21,55 @@ function setConn(state, text) {
   el.className = "conn " + state;
   el.textContent = text || (state === "ok" ? "本机桥已连接" : "本机桥未启动");
 }
-
 function show(el) { el.classList.remove("hidden"); }
 function hide(el) { el.classList.add("hidden"); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 function updateModeInfo() {
   const el = $("#modeinfo");
   if (!el) return;
   const mode = (document.querySelector('input[name="mode"]:checked') || {}).value || "single";
   if (mode === "collection") {
-    if (seasonInfo.in_season) {
-      el.textContent = "将下载：整个合集《" + seasonInfo.season_title + "》 共 " + seasonInfo.count + " 首";
-    } else if (seasonInfo.count > 1) {
-      el.textContent = "将下载：全部 " + seasonInfo.count + " 段（多P视频）";
-    } else {
-      el.textContent = "当前视频只有 1 段，将只下载单条";
-    }
-  } else {
-    el.textContent = "将下载：仅当前视频";
-  }
+    if (seasonInfo.in_season) el.textContent = "将下载：整个合集《" + seasonInfo.season_title + "》 共 " + seasonInfo.count + " 首";
+    else if (seasonInfo.count > 1) el.textContent = "将下载：全部 " + seasonInfo.count + " 段（多P视频）";
+    else el.textContent = "当前视频只有 1 段，将只下载单条";
+  } else el.textContent = "将下载：仅当前视频";
 }
 
-function renderJob(j) {
-  const total = j.total || 0;
-  const done = j.done || 0;
-  const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
-  const pctEl = $("#pct");
-  if (pctEl) pctEl.textContent = total ? (pct + "%　" + done + "/" + total) : "准备中…";
-  $("#bar").style.width = (total ? pct : 8) + "%";
-  $("#msg").textContent = j.message || j.status;
-  $("#errs").textContent = (j.errors && j.errors.length) ? j.errors.slice(-6).join("\n") : "";
+function renderJobs(data) {
+  const list = $("#joblist");
+  const jobs = (data.jobs || []).slice();
+  $("#concurrency").textContent = "并发上限 " + (data.concurrency || 1);
+  if (!jobs.length) { list.innerHTML = '<div class="js">暂无任务</div>'; return; }
+  const rank = { running: 0, queued: 1, starting: 2, error: 3, done: 4 };
+  jobs.sort((a, b) => ((rank[a.status] != null ? rank[a.status] : 5) - (rank[b.status] != null ? rank[b.status] : 5)) || ((b.created || 0) - (a.created || 0)));
+  list.innerHTML = "";
+  jobs.slice(0, 8).forEach((j) => {
+    const total = j.total || 0, done = j.done || 0;
+    const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    const st = { queued: "排队中", running: "进行中", starting: "准备中", done: "完成", error: "出错" }[j.status] || j.status;
+    let sub = st;
+    if (j.status === "running" && total) sub = st + " · " + pct + "% (" + done + "/" + total + ")";
+    else if (j.status === "done") sub = "完成 · " + (j.total ? total + " 项" : "");
+    else if (j.status === "queued") sub = "排队中…";
+    const el = document.createElement("div");
+    el.className = "job " + (j.status === "done" ? "done" : (j.status === "error" ? "err" : ""));
+    el.innerHTML = '<div class="jt">' + esc(j.title || j.url || "(任务)") + '</div>' +
+      '<div class="js">' + esc(sub) + (j.status === "error" && j.message ? "：" + esc(j.message) : "") + '</div>' +
+      '<div class="jbar"><i style="width:' + (j.status === "done" ? 100 : pct) + '%"></i></div>';
+    list.appendChild(el);
+  });
 }
 
-async function getSavedJob() {
-  try { return (await chrome.storage.local.get(JOB_KEY))[JOB_KEY] || null; } catch (e) { return null; }
-}
-async function saveJob(id) { try { await chrome.storage.local.set({ [JOB_KEY]: id }); } catch (e) {} }
-async function clearJob() { try { await chrome.storage.local.remove(JOB_KEY); } catch (e) {} }
-
-async function tryResume() {
-  const jobId = await getSavedJob();
-  if (!jobId) return false;
+async function loadJobs() {
   try {
-    const j = await api("/job/" + jobId);
-    if (j.status === "running" || j.status === "starting") {
-      hide($("#detect")); hide($("#opts")); hide($("#modeinfo")); hide($("#notpage"));
-      show($("#prog"));
-      renderJob(j);
-      $("#go").disabled = true;
-      poll(jobId);
-      return true;
-    }
-  } catch (e) {}
-  await clearJob();
-  return false;
+    const data = await api("/jobs");
+    show($("#tasksec"));
+    renderJobs(data);
+  } catch (e) {
+    $("#joblist").innerHTML = '<div class="js">读取任务失败：' + esc(e.message) + '</div>';
+    show($("#tasksec"));
+  }
 }
 
 async function init() {
@@ -88,15 +82,16 @@ async function init() {
     $("#go").disabled = true;
     return;
   }
-  // 若上次有正在进行的任务，优先恢复进度显示
-  if (await tryResume()) return;
+  loadJobs();
+  if (jobsTimer) clearInterval(jobsTimer);
+  jobsTimer = setInterval(loadJobs, 1200);
 
   chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
     currentUrl = (tabs[0] || {}).url || "";
-    if (!/BV[0-9A-Za-z]{10}/.test(currentUrl)) { show($("#notpage")); return; }
+    if (!/BV[0-9A-Za-z]{10}/.test(currentUrl)) { return; }
     try {
       const info = await api("/resolve", { url: currentUrl });
-      if (info.error) { $("#notpage").textContent = info.error; show($("#notpage")); return; }
+      if (info.error) return;
       seasonInfo = { in_season: !!info.in_season, count: info.count || 0, season_title: info.season_title || "" };
       $("#vtitle").textContent = info.title || "(无标题)";
       $("#vowner").textContent = "UP：" + (info.owner || "?") + "　共 " + info.count + " 个视频";
@@ -113,10 +108,8 @@ async function init() {
       show($("#detect")); show($("#opts")); show($("#modeinfo"));
       updateModeInfo();
       $("#go").disabled = false;
-    } catch (e) {
-      $("#notpage").textContent = "读取视频信息失败：" + e.message;
-      show($("#notpage"));
-    }
+      $("#go").textContent = "加入下载队列";
+    } catch (e) {}
   });
 }
 
@@ -127,39 +120,19 @@ $("#go").addEventListener("click", async () => {
   if (mode === "collection" && seasonInfo.count <= 1) mode = "single";
   const wantLyrics = document.getElementById("wantLyrics").checked;
   $("#go").disabled = true;
-  hide($("#detect")); hide($("#opts")); hide($("#modeinfo"));
-  show($("#prog"));
-  $("#pct").textContent = "准备中…";
-  $("#msg").textContent = "提交中…";
-  $("#errs").textContent = "";
-  $("#bar").style.width = "0%";
+  const old = $("#go").textContent;
+  $("#go").textContent = "提交中…";
   try {
     const r = await api("/download", { url: currentUrl, mode, lyrics: wantLyrics });
     if (r.error) throw new Error(r.error);
-    await saveJob(r.job_id);
-    poll(r.job_id);
-  } catch (e) {
-    $("#msg").textContent = "提交失败：" + e.message;
+    await loadJobs();
+    $("#go").textContent = old;
     $("#go").disabled = false;
+  } catch (e) {
+    $("#go").textContent = old;
+    $("#go").disabled = false;
+    alert("提交失败：" + e.message);
   }
 });
-
-function poll(jobId) {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    try {
-      const j = await api("/job/" + jobId);
-      renderJob(j);
-      if (j.status === "done" || j.status === "error") {
-        clearInterval(pollTimer); pollTimer = null;
-        $("#bar").style.width = "100%";
-        await clearJob();
-        $("#go").disabled = false;
-      }
-    } catch (e) {
-      $("#msg").textContent = "查询进度失败：" + e.message;
-    }
-  }, 900);
-}
 
 init();
