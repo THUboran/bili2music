@@ -590,6 +590,8 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "X-Bili-Token, Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        # Chrome 私有网络访问(PNA)：扩展(chrome-extension://)访问 127.0.0.1 的预检需要此头
+        self.send_header("Access-Control-Allow-Private-Network", "true")
 
     def _json(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
