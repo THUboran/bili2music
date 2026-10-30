@@ -49,12 +49,7 @@
     <label><input type="radio" name="mode" value="collection" checked> 整个合集</label>
     <label><input type="radio" name="mode" value="single"> 仅当前视频</label>
   </div>
-
-  <div class="row" id="lyricsrow">
-    <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="wantLyrics" checked> 需要歌词（有烧录字幕用 OCR，否则用字幕轨）</label>
-  </div>
-
-  <div id="modeinfo" class="meta hidden" style="margin:0 0 10px;"></div>
+<div id="modeinfo" class="meta hidden" style="margin:0 0 10px;"></div>
 
   <button id="go" disabled>加入下载队列</button>
 
@@ -63,7 +58,7 @@
     <div id="joblist"></div>
   </div>
 
-  <div class="hint">下载后自动写入标签/封面并导入「音乐」App；视频若有字幕轨会自动带上歌词。<br>没有 Apple Music 订阅时，iPhone 需在 Finder 里勾「同步音乐」到手机。</div>
+  <div class="hint">下载后自动写入标签/封面并导入「音乐」App。<br>没有 Apple Music 订阅时，iPhone 需在 Finder 里勾「同步音乐」到手机。</div>
 
   <script src="config.js"></script>
   <script src="popup.js"></script>
