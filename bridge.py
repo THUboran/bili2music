@@ -439,7 +439,7 @@ def download_one(page, folder, idx, total, artist, album, workdir, original="", 
     # tag
     if HAVE_TAG:
         try:
-            tag_mp3(src, page.get("title") or "untitled", artist, album, idx, total, (cover_url or page.get("pic")), original, album_artist)
+            tag_mp3(src, page.get("title") or "untitled", artist, album, idx, total, page.get("pic"), original, album_artist)
         except Exception as e:
             log("tag fail", page.get("url"), repr(e))
     final = os.path.join(folder, "%03d_%s.mp3" % (idx, safe_name(page.get("title") or "untitled")))
@@ -578,7 +578,6 @@ def run_job(job_id, url, mode):
     else:
         album = "单曲"
     owner = info["owner"]
-    album_cover = pages[0].get("pic") if (mode != "single" and pages) else None
     folder = os.path.join(MUSIC_BASE, "UP 主 " + safe_name(owner, 60))
     os.makedirs(folder, exist_ok=True)
     job["folder"] = folder
@@ -619,7 +618,7 @@ def run_job(job_id, url, mode):
             artist = clean if (not is_cover and clean) else owner
             orig_tag = clean or "待核实"
             f = download_one(p, folder, i, len(pages), artist, album, workdir, orig_tag,
-                             job.get("lyrics", True), owner, album_cover)
+                             job.get("lyrics", True), owner)
             DONE[key] = {"path": f, "imported": False, "title": p.get("title"), "owner": owner}
             save_done(DONE)
             new_files.append(f)
