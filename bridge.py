@@ -128,6 +128,9 @@ def resolve(url):
     data = d["data"]
     owner = (data.get("owner") or {}).get("name") or "未知UP主"
     season = data.get("ugc_season")
+    p_m = re.search(r"[?&]p=(\d+)", url or "")
+    p_cur = int(p_m.group(1)) if p_m else 1
+    multi_part = False
     pages = []
     if season:
         for sec in season.get("sections", []):
@@ -138,6 +141,7 @@ def resolve(url):
                               "url": "https://www.bilibili.com/video/" + ep["bvid"]})
         season_title = season.get("title")
     elif len(data.get("pages") or []) > 1:
+        multi_part = True
         for i, p in enumerate(data["pages"], 1):
             pages.append({"bvid": bv, "title": p.get("part") or ("P%d" % i),
                           "pic": data.get("pic"),
@@ -151,6 +155,8 @@ def resolve(url):
     return {
         "bvid": bv, "title": data.get("title"), "owner": owner,
         "in_season": bool(season),
+        "multi_part": multi_part,
+        "p_current": p_cur,
         "season_title": season_title,
         "season_count": (season or {}).get("ep_count", 0),
         "count": len(pages), "pages": pages,
@@ -508,11 +514,20 @@ def run_job(job_id, url, mode):
     job["info"] = {k: info[k] for k in ("title", "owner", "in_season", "season_title", "season_count", "count")}
     pages = info["pages"]
     if mode == "single":
-        same = [p for p in pages if p["bvid"] == info["bvid"]]
-        pages = same[:1] if same else pages[:1]
+        if info.get("multi_part"):
+            _idx = info.get("p_current", 1)
+            pages = pages[_idx - 1:_idx] if 1 <= _idx <= len(pages) else pages[:1]
+        else:
+            same = [p for p in pages if p["bvid"] == info["bvid"]]
+            pages = same[:1] if same else pages[:1]
     job["total"] = len(pages)
     job["status"] = "running"
-    album = info["season_title"] if (mode != "single" and info["in_season"]) else "单曲"
+    if mode != "single" and info["in_season"]:
+        album = info["season_title"]
+    elif mode != "single" and info.get("multi_part"):
+        album = info["title"]
+    else:
+        album = "单曲"
     owner = info["owner"]
     folder = os.path.join(MUSIC_BASE, "UP 主 " + safe_name(owner, 60))
     os.makedirs(folder, exist_ok=True)
